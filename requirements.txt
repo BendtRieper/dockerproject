@@ -3,3 +3,5 @@ tensorflow==2.16.1
 numpy==1.24.3
 prometheus_client == 0.19.0
 flwr_datasets[vision] == 0.0.2
+pandas == 2.2.2
+scikit-learn==1.5.0

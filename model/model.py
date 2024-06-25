@@ -6,13 +6,16 @@ class Model:
     def __init__(self, learning_rate):
         self.learning_rate = learning_rate
         self.loss_function = tf.keras.losses.SparseCategoricalCrossentropy()
-        self.model = tf.keras.applications.MobileNetV2(
-            (32, 32, 3), alpha=0.1, classes=10, weights=None
-        )
+        self.model = None  # Initialize model without specifying input shape
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
 
-    def compile(self):
-        self.model.compile(self.optimizer, self.loss_function, metrics=["accuracy"])
+    def compile(self, input_shape, output_shape):
+        self.model = tf.keras.Sequential([
+            tf.keras.layers.Dense(64, activation='relu', input_shape=input_shape),
+            tf.keras.layers.Dense(32, activation='relu'),
+            tf.keras.layers.Dense(output_shape)  # Adjust output_shape here
+        ])
+        self.model.compile(optimizer=self.optimizer, loss=self.loss_function, metrics=['accuracy'])
 
     def get_model(self):
         return self.model

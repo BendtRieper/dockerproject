@@ -7,6 +7,8 @@ WORKDIR /app
 # Copy the requirements file into the container
 COPY ./requirements.txt /app/requirements.txt
 
+# Copy Data into Docker Image
+COPY combinedTraffic_clean.csv /app/combinedTraffic_clean.csv
 # Install gcc and other dependencies
 RUN apt-get update && apt-get install -y \
     gcc \

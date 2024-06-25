@@ -4,7 +4,6 @@ import flwr as fl
 import tensorflow as tf
 import logging
 from helpers.load_data import load_data
-import os
 from model.model import Model
 
 logging.basicConfig(level=logging.INFO)  # Configure logging
@@ -38,68 +37,56 @@ args = parser.parse_args()
 # Create an instance of the model and pass the learning rate as an argument
 model = Model(learning_rate=args.learning_rate)
 
-# Compile the model
-model.compile()
-
 
 class Client(fl.client.NumPyClient):
     def __init__(self, args):
         self.args = args
 
+        # Load and prepare data
         logger.info("Preparing data...")
-        (x_train, y_train), (x_test, y_test) = load_data(
+        (x_train, y_train), (x_val, y_val), (x_test, y_test), input_shape, output_shape = load_data(
+            csv_path="/app/combinedTraffic_clean.csv",
             data_sampling_percentage=self.args.data_percentage,
             client_id=self.args.client_id,
             total_clients=self.args.total_clients,
         )
 
+        # Initialize the model
+        self.model = Model(learning_rate=self.args.learning_rate)
+        self.model.compile(input_shape=input_shape, output_shape=output_shape)
+
+        # Store datasets as attributes
         self.x_train = x_train
         self.y_train = y_train
+        self.x_val = x_val
+        self.y_val = y_val
         self.x_test = x_test
         self.y_test = y_test
 
     def get_parameters(self, config):
-        # Return the parameters of the model
-        return model.get_model().get_weights()
+        return self.model.get_model().get_weights()
 
     def fit(self, parameters, config):
-        # Set the weights of the model
-        model.get_model().set_weights(parameters)
+        self.model.get_model().set_weights(parameters)
+        self.model.get_model().fit(self.x_train, self.y_train, epochs=1, verbose=0)
+        parameters_prime = self.model.get_model().get_weights()
 
-        # Train the model
-        history = model.get_model().fit(
-            self.x_train, self.y_train, batch_size=self.args.batch_size
-        )
+        # Calculate validation accuracy after training
+        val_loss, val_accuracy = self.model.get_model().evaluate(self.x_val, self.y_val, verbose=0)
 
-        # Calculate evaluation metric
-        results = {
-            "accuracy": float(history.history["accuracy"][-1]),
-        }
-
-        # Get the parameters after training
-        parameters_prime = model.get_model().get_weights()
-
-        # Directly return the parameters and the number of examples trained on
-        return parameters_prime, len(self.x_train), results
+        return parameters_prime, len(self.x_train), {"accuracy": float(val_accuracy)}
 
     def evaluate(self, parameters, config):
-        # Set the weights of the model
-        model.get_model().set_weights(parameters)
-
-        # Evaluate the model and get the loss and accuracy
-        loss, accuracy = model.get_model().evaluate(
-            self.x_test, self.y_test, batch_size=self.args.batch_size
-        )
-
-        # Return the loss, the number of examples evaluated on and the accuracy
-        return float(loss), len(self.x_test), {"accuracy": float(accuracy)}
+        self.model.get_model().set_weights(parameters)
+        test_loss, test_accuracy = self.model.get_model().evaluate(self.x_test, self.y_test, verbose=0)
+        return float(test_loss), len(self.x_test), {"accuracy": float(test_accuracy)}
 
 
 # Function to Start the Client
 def start_fl_client():
     try:
-        client = Client(args).to_client()
-        fl.client.start_client(server_address=args.server_address, client=client)
+        client = Client(args)
+        fl.client.start_numpy_client(server_address=args.server_address, client=client)
     except Exception as e:
         logger.error("Error starting FL client: %s", e)
         return {"status": "error", "message": str(e)}
